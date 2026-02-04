@@ -9,9 +9,14 @@ function getTopProduitSimule($listeAchats) {
     // Simuler la logique de produitsPlusAchetes
     $produits = [];
 
-    // Parser la liste d'achats (format: "produit1; produit2; produit1; ...")
-    $achats = explode(';', $listeAchats);
-    $achats = array_map('trim', $achats);
+    // Si c'est un tableau, utiliser directement, sinon parser la chaîne
+    if (is_array($listeAchats)) {
+        $achats = $listeAchats;
+    } else {
+        // Parser la liste d'achats (format: "produit1; produit2; produit1; ...")
+        $achats = explode(';', $listeAchats);
+        $achats = array_map('trim', $achats);
+    }
 
     // Compter les occurrences de chaque produit
     foreach ($achats as $produit) {

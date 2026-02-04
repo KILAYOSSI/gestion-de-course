@@ -3,190 +3,99 @@
 
 class Achat extends Model {
 
-    // Récupérer tous les achats avec les détails des produits et membres
-    public function getAllWithDetails() {
-        $stmt = $this->pdo->query("
-            SELECT
-                a.idAchat as id,
-                a.dateAchat as date_achat,
-                CONCAT(m.nom, ' ', m.prenom) as membre_nom,
-                la.idProduit,
-                p.nomProduit as produit_nom,
-                c.nomCategorie as categorie_nom,
-                la.quantite,
-                la.prixUnitaire as prix,
-                (la.quantite * la.prixUnitaire) as total_ligne
-            FROM Achat a
-            JOIN Membre m ON a.idMembre = m.idMembre
-            JOIN LigneAchat la ON a.idAchat = la.idAchat
-            JOIN Produit p ON la.idProduit = p.idProduit
-            JOIN Categorie c ON p.idCategorie = c.idCategorie
-            ORDER BY a.dateAchat DESC, a.idAchat DESC, la.idLigne
-        ");
+    // Récupérer tous les achats triés par date décroissante
+    public function getAll() {
+        $stmt = $this->pdo->query("SELECT * FROM Achats ORDER BY date_achat DESC, id DESC");
         return $stmt->fetchAll();
     }
 
-    // Récupérer un achat spécifique avec ses lignes
-    public function getById($id) {
-        $stmt = $this->pdo->prepare("
-            SELECT
-                a.idAchat as id,
-                a.dateAchat as date_achat,
-                a.idMembre,
-                m.nom,
-                m.prenom,
-                CONCAT(m.nom, ' ', m.prenom) as membre_nom
-            FROM Achat a
-            JOIN Membre m ON a.idMembre = m.idMembre
-            WHERE a.idAchat = ?
+    // Récupérer tous les achats avec tri personnalisé
+    public function getAllSorted($sort = 'date_desc') {
+        $orderBy = 'date_achat DESC, id DESC';
+        switch ($sort) {
+            case 'date_asc':
+                $orderBy = 'date_achat ASC, id ASC';
+                break;
+            case 'prix_desc':
+                $orderBy = 'prix DESC, date_achat DESC';
+                break;
+            case 'prix_asc':
+                $orderBy = 'prix ASC, date_achat DESC';
+                break;
+            case 'nom_asc':
+                $orderBy = 'nom_produit ASC, date_achat DESC';
+                break;
+            case 'nom_desc':
+                $orderBy = 'nom_produit DESC, date_achat DESC';
+                break;
+            default:
+                $orderBy = 'date_achat DESC, id DESC';
+        }
+        $stmt = $this->pdo->prepare("SELECT * FROM Achats ORDER BY $orderBy");
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    // Ajouter un nouvel achat
+    public function ajouter($nomProduit, $prix, $dateAchat) {
+        $stmt = $this->pdo->prepare("INSERT INTO Achats (nom_produit, prix, date_achat) VALUES (?, ?, ?)");
+        return $stmt->execute([$nomProduit, $prix, $dateAchat]);
+    }
+
+    // Obtenir le produit le plus acheté (par nombre d'occurrences)
+    public function getTopProduit() {
+        $stmt = $this->pdo->query("
+            SELECT nom_produit, COUNT(*) as nombre_achats
+            FROM Achats
+            GROUP BY nom_produit
+            ORDER BY nombre_achats DESC
+            LIMIT 1
         ");
-        $stmt->execute([$id]);
-        $achat = $stmt->fetch();
-
-        if ($achat) {
-            // Récupérer les lignes d'achat
-            $stmt = $this->pdo->prepare("
-                SELECT
-                    la.idLigne,
-                    la.idProduit,
-                    p.nomProduit as produit_nom,
-                    c.nomCategorie as categorie_nom,
-                    la.quantite,
-                    la.prixUnitaire as prix
-                FROM LigneAchat la
-                JOIN Produit p ON la.idProduit = p.idProduit
-                JOIN Categorie c ON p.idCategorie = c.idCategorie
-                WHERE la.idAchat = ?
-                ORDER BY la.idLigne
-            ");
-            $stmt->execute([$id]);
-            $achat['lignes'] = $stmt->fetchAll();
-        }
-
-        return $achat;
+        return $stmt->fetch();
     }
 
-    // Ajouter un nouvel achat avec ses lignes
-    public function ajouter($idMembre, $dateAchat, $lignes) {
-        try {
-            $this->pdo->beginTransaction();
-
-            // Insérer l'achat
-            $stmt = $this->pdo->prepare("INSERT INTO Achat (dateAchat, idMembre) VALUES (?, ?)");
-            $stmt->execute([$dateAchat, $idMembre]);
-            $idAchat = $this->pdo->lastInsertId();
-
-            // Insérer les lignes d'achat
-            $stmt = $this->pdo->prepare("INSERT INTO LigneAchat (idAchat, idProduit, quantite, prixUnitaire) VALUES (?, ?, ?, ?)");
-            foreach ($lignes as $ligne) {
-                $stmt->execute([$idAchat, $ligne['idProduit'], $ligne['quantite'], $ligne['prix']]);
-            }
-
-            $this->pdo->commit();
-            return $idAchat;
-        } catch (Exception $e) {
-            $this->pdo->rollBack();
-            throw $e;
-        }
+    // Calculer le montant total des dépenses
+    public function getTotalDepenses() {
+        $stmt = $this->pdo->query("SELECT SUM(prix) as total FROM Achats");
+        $result = $stmt->fetch();
+        return $result['total'] ?? 0;
     }
 
-    // Modifier un achat
-    public function modifier($id, $idMembre, $dateAchat, $lignes) {
-        try {
-            $this->pdo->beginTransaction();
+    // Obtenir le nombre total d'achats enregistrés
+    public function getTotalAchats() {
+        $stmt = $this->pdo->query("SELECT COUNT(*) as total FROM Achats");
+        $result = $stmt->fetch();
+        return $result['total'] ?? 0;
+    }
 
-            // Modifier l'achat
-            $stmt = $this->pdo->prepare("UPDATE Achat SET dateAchat = ?, idMembre = ? WHERE idAchat = ?");
-            $stmt->execute([$dateAchat, $idMembre, $id]);
-
-            // Supprimer les anciennes lignes
-            $stmt = $this->pdo->prepare("DELETE FROM LigneAchat WHERE idAchat = ?");
-            $stmt->execute([$id]);
-
-            // Insérer les nouvelles lignes
-            $stmt = $this->pdo->prepare("INSERT INTO LigneAchat (idAchat, idProduit, quantite, prixUnitaire) VALUES (?, ?, ?, ?)");
-            foreach ($lignes as $ligne) {
-                $stmt->execute([$id, $ligne['idProduit'], $ligne['quantite'], $ligne['prix']]);
-            }
-
-            $this->pdo->commit();
-            return true;
-        } catch (Exception $e) {
-            $this->pdo->rollBack();
-            throw $e;
-        }
+    // Mettre à jour un achat
+    public function modifier($id, $nomProduit, $prix, $dateAchat) {
+        $stmt = $this->pdo->prepare("UPDATE Achats SET nom_produit = ?, prix = ?, date_achat = ? WHERE id = ?");
+        return $stmt->execute([$nomProduit, $prix, $dateAchat, $id]);
     }
 
     // Supprimer un achat
     public function supprimer($id) {
-        try {
-            $this->pdo->beginTransaction();
-
-            // Supprimer les lignes d'achat d'abord (contrainte de clé étrangère)
-            $stmt = $this->pdo->prepare("DELETE FROM LigneAchat WHERE idAchat = ?");
-            $stmt->execute([$id]);
-
-            // Supprimer l'achat
-            $stmt = $this->pdo->prepare("DELETE FROM Achat WHERE idAchat = ?");
-            $result = $stmt->execute([$id]);
-
-            $this->pdo->commit();
-            return $result;
-        } catch (Exception $e) {
-            $this->pdo->rollBack();
-            throw $e;
-        }
+        $stmt = $this->pdo->prepare("DELETE FROM Achats WHERE id = ?");
+        return $stmt->execute([$id]);
     }
 
-    // Statistiques : Dépenses par membre
-    public function depensesParMembre() {
+    // Récupérer un achat par ID
+    public function getById($id) {
+        $stmt = $this->pdo->prepare("SELECT * FROM Achats WHERE id = ?");
+        $stmt->execute([$id]);
+        return $stmt->fetch();
+    }
+
+    // Obtenir les données pour le graphique d'évolution
+    public function getEvolutionAchats() {
         $stmt = $this->pdo->query("
-            SELECT
-                CONCAT(m.nom, ' ', m.prenom) as nom,
-                SUM(la.quantite * la.prixUnitaire) as total_depenses
-            FROM Achat a
-            JOIN Membre m ON a.idMembre = m.idMembre
-            JOIN LigneAchat la ON a.idAchat = la.idAchat
-            GROUP BY m.idMembre, m.nom, m.prenom
-            ORDER BY total_depenses DESC
+            SELECT DATE_FORMAT(date_achat, '%Y-%m') as mois, SUM(prix) as total
+            FROM Achats
+            GROUP BY DATE_FORMAT(date_achat, '%Y-%m')
+            ORDER BY mois
         ");
         return $stmt->fetchAll();
-    }
-
-    // Statistiques : Produits les plus achetés
-    public function produitsPlusAchetes() {
-        $stmt = $this->pdo->query("
-            SELECT
-                p.nomProduit as nom,
-                SUM(la.quantite) as total_quantite
-            FROM LigneAchat la
-            JOIN Produit p ON la.idProduit = p.idProduit
-            GROUP BY p.idProduit, p.nomProduit
-            ORDER BY total_quantite DESC
-            LIMIT 10
-        ");
-        return $stmt->fetchAll();
-    }
-
-    // Statistiques : Dépenses par catégorie
-    public function depensesParCategorie() {
-        $stmt = $this->pdo->query("
-            SELECT
-                c.nomCategorie as nom,
-                SUM(la.quantite * la.prixUnitaire) as total_depenses
-            FROM LigneAchat la
-            JOIN Produit p ON la.idProduit = p.idProduit
-            JOIN Categorie c ON p.idCategorie = c.idCategorie
-            GROUP BY c.idCategorie, c.nomCategorie
-            ORDER BY total_depenses DESC
-        ");
-        return $stmt->fetchAll();
-    }
-
-    // Fonction pour obtenir le top produit (produit le plus acheté)
-    public function getTopProduit() {
-        $produits = $this->produitsPlusAchetes();
-        return $produits[0] ?? null;
     }
 }
 ?>

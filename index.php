@@ -1,6 +1,9 @@
 <?php
 // Front controller pour l'application MVC de gestion des courses familiales
 
+// Démarrage de la session
+session_start();
+
 // Inclusion des fichiers de configuration
 require_once 'config/database.php';
 

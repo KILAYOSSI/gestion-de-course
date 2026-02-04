@@ -1,15 +1,16 @@
 <?php
-$servername = "localhost";
-$username = "root"; // ou votre nom d'utilisateur MySQL
-$password = ""; // ou votre mot de passe MySQL
-$dbname = "gestion de course";
+// Configuration de la base de données
+
+$host = 'localhost';
+$dbname = 'gestion de course';
+$username = 'root'; // Utilisateur par défaut de WAMP
+$password = ''; // Mot de passe vide par défaut
 
 try {
-    $conn = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    global $pdo;
-    $pdo = $conn;
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    echo "Connexion échouée: " . $e->getMessage();
+    die("Erreur de connexion à la base de données : " . $e->getMessage());
 }
 ?>

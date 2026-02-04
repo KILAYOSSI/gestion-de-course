@@ -12,10 +12,10 @@ class StatistiquesController {
 
     // Afficher les statistiques
     public function index() {
-        $depensesParMembre = $this->achatModel->depensesParMembre();
-        $produitsPlusAchetes = $this->achatModel->produitsPlusAchetes();
-        $depensesParCategorie = $this->achatModel->depensesParCategorie();
         $topProduit = $this->achatModel->getTopProduit();
+        $totalDepenses = $this->achatModel->getTotalDepenses();
+        $totalAchats = $this->achatModel->getTotalAchats();
+        $evolutionAchats = $this->achatModel->getEvolutionAchats();
 
         include 'app/views/statistiques/index.php';
     }
